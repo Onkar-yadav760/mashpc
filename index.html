@@ -314,25 +314,32 @@
   <script>
     const pcImages = ["pc1.webp", "pc2.webp", "pc3.webp", "pc4.webp", "pc5.webp", "pc6.webp", "pc7.webp", "pc8.webp", "pc9.webp"];
     const votedPairs = JSON.parse(localStorage.getItem('votedPairs')) || [];
-    const pcs = JSON.parse(localStorage.getItem('pcmash_pcs')) || Array.from({ length: 1000 }, (_, i) => {
-      const themes = ["Gaming", "Workstation", "Content Creation", "Streaming", "RGB"];
-      const potato = Math.random() < 0.01;
-      const name = potato ? "Legendary Potato Rig 🥔" : `${themes[i % themes.length]} Rig #${i + 1}`;
-      return {
-        id: i + 1,
-        name,
-        cpu: potato ? "Intel Pentium" : "Intel i7-13700K",
-        gpu: potato ? "GTX 750 Ti" : "RTX 4080",
-        ram: potato ? "4GB DDR3" : "32GB DDR5",
-        storage: potato ? "250GB HDD" : "1TB NVMe SSD",
-        cooling: potato ? "Stock Cooler" : "360mm AIO",
-        case: potato ? "Old Beige Case" : "Lian Li O11 Dynamic",
-        rgb: potato ? "None" : "RGB Lighting",
-        image: pcImages[Math.floor(Math.random() * pcImages.length)],
-        rating: Math.floor(Math.random() * 1000)
-      };
-    });
+   const pcs = JSON.parse(localStorage.getItem('pcmash_pcs')) || Array.from({ length: 1000 }, (_, i) => {
+  const themes = ["Gaming", "Workstation", "Content Creation", "Streaming", "RGB"];
+  const potato = Math.random() < 0.01;
+  const name = potato ? "Legendary Potato Rig 🥔" : `${themes[i % themes.length]} Rig #${i + 1}`;
+  return {
+    id: i + 1,
+    name,
+    cpu: potato ? "Intel Pentium" : "Intel i7-13700K",
+    gpu: potato ? "GTX 750 Ti" : "RTX 4080",
+    ram: potato ? "4GB DDR3" : "32GB DDR5",
+    storage: potato ? "250GB HDD" : "1TB NVMe SSD",
+    cooling: potato ? "Stock Cooler" : "360mm AIO",
+    case: potato ? "Old Beige Case" : "Lian Li O11 Dynamic",
+    rgb: potato ? "None" : "RGB Lighting",
+    image: pcImages[Math.floor(Math.random() * pcImages.length)],
+    rating: 1000 // 💡 Ensures rating always exists
+  };
+});
 
+// 🛡️ Patch older rigs from localStorage missing rating
+pcs.forEach(pc => {
+  if (typeof pc.rating !== 'number') {
+    pc.rating = 1000;
+  }
+});
+localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
     let currentPair = [];
 
     function getRandomPair() {
