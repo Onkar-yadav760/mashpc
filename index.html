@@ -390,24 +390,35 @@ localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
     }
 
     function updateElo(winner, loser, k = 32) {
-      const expected = 1 / (1 + Math.pow(10, (loser.rating - winner.rating) / 400));
-      winner.rating += Math.round(k * (1 - expected));
-      loser.rating += Math.round(k * (0 - (1 - expected)));
-    }
+  const expectedWinner = 1 / (1 + Math.pow(10, (loser.rating - winner.rating) / 400));
+  const expectedLoser = 1 / (1 + Math.pow(10, (winner.rating - loser.rating) / 400));
 
-    function vote(winnerId) {
-      const voteSound = document.getElementById('vote-sound');
-      voteSound.play();
-      const winner = winnerId === 'pc1' ? currentPair[0] : currentPair[1];
-      const loser = winnerId === 'pc1' ? currentPair[1] : currentPair[0];
-      updateElo(winner, loser);
-      const key = [winner.id, loser.id].sort().join('-');
-      votedPairs.push(key);
-      localStorage.setItem('votedPairs', JSON.stringify(votedPairs));
-      localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
-      showPopup(`You voted for:<br><strong>${winner.name}</strong>`);
-    }
+  winner.rating = Math.round(winner.rating + k * (1 - expectedWinner));
+  loser.rating = Math.round(loser.rating + k * (0 - expectedLoser));
+}
 
+function vote(winnerId) {
+  const voteSound = document.getElementById('vote-sound');
+  if (voteSound) voteSound.play();
+
+  const winner = winnerId === 'pc1' ? currentPair[0] : currentPair[1];
+  const loser = winnerId === 'pc1' ? currentPair[1] : currentPair[0];
+
+  // Ensure wins/losses exist
+  winner.wins = (winner.wins || 0) + 1;
+  loser.losses = (loser.losses || 0) + 1;
+
+  // Apply ELO
+  updateElo(winner, loser);
+
+  const key = [winner.id, loser.id].sort().join('-');
+  votedPairs.push(key);
+
+  localStorage.setItem('votedPairs', JSON.stringify(votedPairs));
+  localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
+
+  showPopup(`You voted for:<br><strong>${winner.name}</strong>`);
+}
     function renderLeaderboard() {
       const topPCs = [...pcs].sort((a, b) => b.rating - a.rating).slice(0, 10);
       const list = document.getElementById("leaderboard-list");
