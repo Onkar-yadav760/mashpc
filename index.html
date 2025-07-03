@@ -312,113 +312,267 @@
   <div class="popup" id="popup"></div>
   <audio id="vote-sound" src="https://freesound.org/data/previews/320/320181_5260877-lq.mp3"></audio>
   <script>
-    const pcImages = ["pc1.webp", "pc2.webp", "pc3.webp", "pc4.webp", "pc5.webp", "pc6.webp", "pc7.webp", "pc8.webp", "pc9.webp"];
-    const votedPairs = JSON.parse(localStorage.getItem('votedPairs')) || [];
-   const pcs = JSON.parse(localStorage.getItem('pcmash_pcs')) || Array.from({ length: 1000 }, (_, i) => {
-  const themes = ["Gaming", "Workstation", "Content Creation", "Streaming", "RGB"];
-  const potato = Math.random() < 0.01;
-  const name = potato ? "Legendary Potato Rig 🥔" : `${themes[i % themes.length]} Rig #${i + 1}`;
-  return {
-    id: i + 1,
-    name,
-    cpu: potato ? "Intel Pentium" : "Intel i7-13700K",
-    gpu: potato ? "GTX 750 Ti" : "RTX 4080",
-    ram: potato ? "4GB DDR3" : "32GB DDR5",
-    storage: potato ? "250GB HDD" : "1TB NVMe SSD",
-    cooling: potato ? "Stock Cooler" : "360mm AIO",
-    case: potato ? "Old Beige Case" : "Lian Li O11 Dynamic",
-    rgb: potato ? "None" : "RGB Lighting",
-    image: pcImages[Math.floor(Math.random() * pcImages.length)],
-    rating: 1000 // 💡 Ensures rating always exists
-  };
-});
+    // Enhanced storage system with multiple fallbacks
+    function getStorage() {
+      const testKey = 'storage_test_' + Math.random().toString(36).substring(2);
+      try {
+        // Test localStorage
+        localStorage.setItem(testKey, 'test');
+        localStorage.removeItem(testKey);
+        return {
+          type: 'localStorage',
+          getItem: (key) => localStorage.getItem(key),
+          setItem: (key, value) => localStorage.setItem(key, value),
+          removeItem: (key) => localStorage.removeItem(key)
+        };
+      } catch (e) {
+        try {
+          // Fallback to sessionStorage
+          sessionStorage.setItem(testKey, 'test');
+          sessionStorage.removeItem(testKey);
+          return {
+            type: 'sessionStorage',
+            getItem: (key) => sessionStorage.getItem(key),
+            setItem: (key, value) => sessionStorage.setItem(key, value),
+            removeItem: (key) => sessionStorage.removeItem(key)
+          };
+        } catch (e) {
+          console.warn("Both localStorage and sessionStorage blocked, using memory fallback");
+          // Final fallback to memory storage
+          const memoryStorage = {
+            _data: {},
+            type: 'memory',
+            getItem: function(key) { return this._data[key]; },
+            setItem: function(key, value) { this._data[key] = value; },
+            removeItem: function(key) { delete this._data[key]; }
+          };
+          // Try to persist memory storage to localStorage if it becomes available
+          setInterval(() => {
+            try {
+              if (localStorage.setItem(testKey, 'test')) {
+                localStorage.removeItem(testKey);
+                Object.keys(memoryStorage._data).forEach(key => {
+                  localStorage.setItem(key, memoryStorage._data[key]);
+                });
+                console.log("Migrated memory storage to localStorage");
+              }
+            } catch (e) {}
+          }, 10000);
+          return memoryStorage;
+        }
+      }
+    }
 
-// 🛡️ Patch older rigs from localStorage missing rating
-pcs.forEach(pc => {
-  if (typeof pc.rating !== 'number') {
-    pc.rating = 1000;
-  }
-});
-localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
+    const storage = getStorage();
+    console.log("Using storage type:", storage.type);
+
+    const pcImages = ["pc1.webp", "pc2.webp", "pc3.webp", "pc4.webp", "pc5.webp", "pc6.webp", "pc7.webp", "pc8.webp", "pc9.webp"];
+    
+    // Initialize data with proper error handling
+    let votedPairs = [];
+    let pcs = [];
+    
+    try {
+      const storedPairs = storage.getItem('votedPairs');
+      const storedPCs = storage.getItem('pcmash_pcs');
+      
+      votedPairs = storedPairs ? JSON.parse(storedPairs) : [];
+      pcs = storedPCs ? JSON.parse(storedPCs) : generateDefaultPCs();
+      
+      console.log("Loaded from storage:", {
+        votedPairs: votedPairs.length,
+        pcs: pcs.length
+      });
+    } catch (e) {
+      console.error("Storage parse error, using defaults", e);
+      pcs = generateDefaultPCs();
+      votedPairs = [];
+    }
+
+    function generateDefaultPCs() {
+      return Array.from({ length: 1000 }, (_, i) => {
+        const themes = ["Gaming", "Workstation", "Content Creation", "Streaming", "RGB"];
+        const potato = Math.random() < 0.01;
+        return {
+          id: i + 1,
+          name: potato ? "Legendary Potato Rig 🥔" : `${themes[i % themes.length]} Rig #${i + 1}`,
+          cpu: potato ? "Intel Pentium" : "Intel i7-13700K",
+          gpu: potato ? "GTX 750 Ti" : "RTX 4080",
+          ram: potato ? "4GB DDR3" : "32GB DDR5",
+          storage: potato ? "250GB HDD" : "1TB NVMe SSD",
+          cooling: potato ? "Stock Cooler" : "360mm AIO",
+          case: potato ? "Old Beige Case" : "Lian Li O11 Dynamic",
+          rgb: potato ? "None" : "RGB Lighting",
+          image: pcImages[Math.floor(Math.random() * pcImages.length)],
+          rating: 1000,
+          wins: 0,
+          losses: 0,
+          lastUpdated: Date.now()
+        };
+      });
+    }
+
+    // Ensure all PCs are properly initialized
+    function initializePCs() {
+      const now = Date.now();
+      pcs.forEach(pc => {
+        pc.rating = typeof pc.rating === 'number' ? pc.rating : 1000;
+        pc.wins = typeof pc.wins === 'number' ? pc.wins : 0;
+        pc.losses = typeof pc.losses === 'number' ? pc.losses : 0;
+        pc.lastUpdated = pc.lastUpdated || now;
+      });
+      
+      try {
+        storage.setItem('pcmash_pcs', JSON.stringify(pcs));
+        console.log("Initialized PCs in storage");
+      } catch (e) {
+        console.error("Failed to initialize PCs in storage", e);
+      }
+    }
+
     let currentPair = [];
 
     function getRandomPair() {
       let a, b, pairKey;
       let tries = 0;
+      const maxTries = 100;
+      const totalPairs = pcs.length * (pcs.length - 1) / 2;
+      
       do {
         a = Math.floor(Math.random() * pcs.length);
         b = Math.floor(Math.random() * pcs.length);
         pairKey = [pcs[a].id, pcs[b].id].sort().join('-');
         tries++;
-      } while ((a === b || votedPairs.includes(pairKey)) && tries < 50);
+        
+        // If we've tried too many times, clear some voted pairs
+        if (tries > maxTries / 2 && votedPairs.length > 1000) {
+          votedPairs = votedPairs.slice(-1000); // Keep only recent 1000 pairs
+          try {
+            storage.setItem('votedPairs', JSON.stringify(votedPairs));
+          } catch (e) {
+            console.error("Failed to trim votedPairs", e);
+          }
+        }
+      } while ((a === b || votedPairs.includes(pairKey)) && tries < maxTries);
+      
+      if (tries >= maxTries) {
+        console.warn(`Failed to find new pair after ${maxTries} tries`);
+        // Return any random pair if we can't find a new one
+        return [pcs[a], pcs[b]];
+      }
+      
       return [pcs[a], pcs[b]];
     }
 
     function loadBattle() {
       const container = document.getElementById("battle-container");
       container.style.opacity = 0;
+      
       setTimeout(() => {
         currentPair = getRandomPair();
         const [pc1, pc2] = currentPair;
+        
         document.getElementById("specs1").innerHTML = `
           <strong>${pc1.name}</strong><br>
           <span class="spec-highlight">${pc1.cpu}</span><br>
           <span class="spec-highlight">${pc1.gpu}</span><br>
           ${pc1.ram} | ${pc1.storage}<br>
           ${pc1.cooling} | ${pc1.case}<br>
-          ${pc1.rgb}`;
+          ${pc1.rgb}<br>
+          <small>Rating: ${pc1.rating} (${pc1.wins}W/${pc1.losses}L)</small>`;
+          
         document.getElementById("specs2").innerHTML = `
           <strong>${pc2.name}</strong><br>
           <span class="spec-highlight">${pc2.cpu}</span><br>
           <span class="spec-highlight">${pc2.gpu}</span><br>
           ${pc2.ram} | ${pc2.storage}<br>
           ${pc2.cooling} | ${pc2.case}<br>
-          ${pc2.rgb}`;
+          ${pc2.rgb}<br>
+          <small>Rating: ${pc2.rating} (${pc2.wins}W/${pc2.losses}L)</small>`;
+          
         const img1 = document.getElementById("img1");
         const img2 = document.getElementById("img2");
         img1.style.opacity = 0;
         img2.style.opacity = 0;
         img1.src = pc1.image;
         img2.src = pc2.image;
+        
         img1.onload = () => { img1.style.opacity = 1; };
         img2.onload = () => { img2.style.opacity = 1; };
+        
         document.getElementById("loading").style.display = "none";
         container.style.display = "flex";
-        container.style.opacity = 1;
+        setTimeout(() => {
+          container.style.opacity = 1;
+        }, 10);
+        
         renderLeaderboard();
       }, 500);
     }
 
     function updateElo(winner, loser, k = 32) {
-  const expectedWinner = 1 / (1 + Math.pow(10, (loser.rating - winner.rating) / 400));
-  const expectedLoser = 1 / (1 + Math.pow(10, (winner.rating - loser.rating) / 400));
+      const winnerOldRating = winner.rating;
+      const loserOldRating = loser.rating;
+      
+      const expectedWinner = 1 / (1 + Math.pow(10, (loser.rating - winner.rating) / 400));
+      const expectedLoser = 1 / (1 + Math.pow(10, (winner.rating - loser.rating) / 400));
 
-  winner.rating = Math.round(winner.rating + k * (1 - expectedWinner));
-  loser.rating = Math.round(loser.rating + k * (0 - expectedLoser));
-}
+      const winnerChange = Math.round(k * (1 - expectedWinner));
+      const loserChange = Math.round(k * (0 - expectedLoser));
 
-function vote(winnerId) {
-  const voteSound = document.getElementById('vote-sound');
-  if (voteSound) voteSound.play();
+      winner.rating += winnerChange;
+      loser.rating += loserChange;
+      winner.lastUpdated = Date.now();
+      loser.lastUpdated = Date.now();
+      
+      console.log(`ELO Update:`);
+      console.log(`Winner: ${winner.name} ${winnerOldRating} → ${winner.rating} (${winnerChange > 0 ? '+' : ''}${winnerChange})`);
+      console.log(`Loser:  ${loser.name} ${loserOldRating} → ${loser.rating} (${loserChange})`);
+    }
 
-  const winner = winnerId === 'pc1' ? currentPair[0] : currentPair[1];
-  const loser = winnerId === 'pc1' ? currentPair[1] : currentPair[0];
+    function vote(winnerId) {
+      try {
+        const voteSound = document.getElementById('vote-sound');
+        if (voteSound) {
+          voteSound.currentTime = 0;
+          voteSound.play().catch(e => console.log("Audio play failed:", e));
+        }
 
-  // Ensure wins/losses exist
-  winner.wins = (winner.wins || 0) + 1;
-  loser.losses = (loser.losses || 0) + 1;
+        const winner = winnerId === 'pc1' ? currentPair[0] : currentPair[1];
+        const loser = winnerId === 'pc1' ? currentPair[1] : currentPair[0];
 
-  // Apply ELO
-  updateElo(winner, loser);
+        // Store old ratings before updating
+        const winnerOldRating = winner.rating;
+        const loserOldRating = loser.rating;
 
-  const key = [winner.id, loser.id].sort().join('-');
-  votedPairs.push(key);
+        winner.wins++;
+        loser.losses++;
 
-  localStorage.setItem('votedPairs', JSON.stringify(votedPairs));
-  localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
+        updateElo(winner, loser);
 
-  showPopup(`You voted for:<br><strong>${winner.name}</strong>`);
-}
+        const key = [winner.id, loser.id].sort().join('-');
+        votedPairs.push(key);
+
+        try {
+          storage.setItem('votedPairs', JSON.stringify(votedPairs));
+          storage.setItem('pcmash_pcs', JSON.stringify(pcs));
+          console.log("Successfully saved to storage");
+        } catch (e) {
+          console.error("Storage save failed:", e);
+        }
+
+        // Calculate rating change
+        const ratingChange = winner.rating - winnerOldRating;
+        showPopup(`You voted for:<br><strong>${winner.name}</strong><br><br>
+          New rating: <span style="color: #facc15">${winner.rating}</span><br>
+          (${ratingChange > 0 ? '↑' : (ratingChange < 0 ? '↓' : '→')} ${Math.abs(ratingChange)})`);
+
+      } catch (e) {
+        console.error("Vote failed:", e);
+        showPopup("Error processing your vote. Please try again.");
+      }
+    }
+
     function renderLeaderboard() {
       const topPCs = [...pcs].sort((a, b) => b.rating - a.rating).slice(0, 10);
       const list = document.getElementById("leaderboard-list");
@@ -430,6 +584,7 @@ function vote(winnerId) {
           </div>
           <div style="text-align: right;">
             <span style="color: #facc15;">ELO: ${pc.rating}</span>
+            <div style="font-size: 0.8rem; color: #aaa;">${pc.wins}W / ${pc.losses}L</div>
           </div>
         </div>
       `).join('');
@@ -442,7 +597,10 @@ function vote(winnerId) {
           <div style="font-size: 3rem; margin-bottom: 10px;">🎉</div>
           <div id="popup-message">${message}</div>
           <div class="emoji-reaction">
-            <span>🔥</span><span>💩</span><span>🤯</span><span>💖</span>
+            <span onclick="reactToVote('🔥')">🔥</span>
+            <span onclick="reactToVote('💩')">💩</span>
+            <span onclick="reactToVote('🤯')">🤯</span>
+            <span onclick="reactToVote('💖')">💖</span>
           </div>
           <div style="margin-top: 15px; font-size: 0.9rem; color: #aaa;">
             Loading next battle...
@@ -451,13 +609,26 @@ function vote(winnerId) {
         </div>
       `;
       popup.classList.add("show");
+      
       if (window.confetti) {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#facc15', '#ffffff', '#ff0000']
-        });
+        try {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#facc15', '#ffffff', '#ff0000']
+          });
+        } catch (e) {
+          console.log("Confetti failed:", e);
+        }
+      }
+    }
+
+    function reactToVote(emoji) {
+      const popup = document.getElementById("popup");
+      const message = document.getElementById("popup-message");
+      if (message) {
+        message.innerHTML += `<div style="margin-top: 10px; font-size: 2rem;">${emoji}</div>`;
       }
     }
 
@@ -466,40 +637,42 @@ function vote(winnerId) {
       loadBattle();
     }
 
-    let percent = 0;
-    const interval = setInterval(() => {
-      percent += Math.floor(Math.random() * 10) + 5;
-      if (percent >= 100) percent = 99;
-      document.getElementById("progress-text").innerText = `Loading PC builds... (${percent}%)`;
-    }, 50);
+    // Initialize the app when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      initializePCs();
+      
+      let percent = 0;
+      const loadingInterval = setInterval(() => {
+        percent += Math.floor(Math.random() * 10) + 5;
+        if (percent >= 100) {
+          percent = 100;
+          clearInterval(loadingInterval);
+          setTimeout(loadBattle, 300);
+        }
+        document.getElementById("progress-text").innerText = `Loading PC builds... (${percent}%)`;
+      }, 50);
+      
+      console.log("App initialized with", pcs.length, "PCs");
+    });
 
-    setTimeout(() => {
-      clearInterval(interval);
-      loadBattle();
-    }, 1000);
-
+    // Service Worker registration
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('SW registered'))
-        .catch(err => console.error('SW failed', err));
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('Service Worker registered'))
+          .catch(err => console.error('Service Worker registration failed:', err));
+      });
     }
-    pcs.forEach(pc => {
-    if (typeof pc.rating !== 'number') {
-      pc.rating = 1000;
-    }
-  });
-  localStorage.setItem('pcmash_pcs', JSON.stringify(pcs));
-     function fadeTransition(callback) {
-    const container = document.getElementById("battle-container");
-    container.classList.remove("fade-in");
-    container.classList.add("fade-out");
 
-    setTimeout(() => {
-      callback();
-      container.classList.remove("fade-out");
-      container.classList.add("fade-in");
-    }, 400);
-  }
+    // Add beforeunload handler to ensure data is saved
+    window.addEventListener('beforeunload', () => {
+      try {
+        storage.setItem('pcmash_pcs', JSON.stringify(pcs));
+        storage.setItem('votedPairs', JSON.stringify(votedPairs));
+      } catch (e) {
+        console.error("Failed to save data before unload", e);
+      }
+    });
   </script>
 </body>
 </html>
